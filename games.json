@@ -1,0 +1,33 @@
+[
+  {
+    "id": "reborn",
+    "name": "theHunter Primal: Reborn",
+    "game_path": "X:\\GameDev\\HunterPrimalClient\\theHunterPrimal_steam\\PrimalReborn\\PrimalReborn.bat",
+    "work_dir": "X:\\GameDev\\HunterPrimalClient\\theHunterPrimal_steam\\PrimalReborn",
+    "args": [],
+    "news_url": "https://raw.githubusercontent.com/github/markup/master/README.md",
+    "icon": "assets/empty_icon.png",
+    "cover": "assets/empty_background.jpg",
+    "update": {
+      "url": "https://mega.nz/folder/2N9DTZgT#jSkc_jUPJxXTuvYz25S_-x3klgFCCYkIp4huzqIqC_g",
+      "dest": "X:\\GameDev\\HunterPrimalClient\\theHunterPrimal_steam\\sample_update.zip",
+      "extract_to": "X:\\GameDev\\HunterPrimalClient\\theHunterPrimal_steam"
+    }
+  },
+  {
+    "id": "vintagestory",
+    "name": "Vintagestory",
+    "game_path": "Z:\\Users\\Raziel\\AppData\\Roaming\\Vintagestory\\Vintagestory.exe",
+    "work_dir": "Z:\\Users\\Raziel\\AppData\\Roaming\\Vintagestory",
+    "args": [],
+    "news_url": "",
+    "icon": "assets/empty_icon.png",
+    "cover": "assets/empty_background.jpg",
+    "update": {
+      "url": "",
+      "dest": "",
+      "extract_to": "Z:\\Users\\Raziel\\AppData\\Roaming\\Vintagestory"
+    },
+    "meta_path": "games\\vintagestory.json"
+  }
+]

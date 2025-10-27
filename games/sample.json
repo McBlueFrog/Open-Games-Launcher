@@ -1,0 +1,15 @@
+{
+  "id": "sample",
+  "name": "Sample Game",
+  "game_path": "X:\\GameDev\\OpenGamesLauncher\\Open-Games-Launcher\\SampleGame.exe",
+  "work_dir": "X:\\GameDev\\OpenGamesLauncher\\Open-Games-Launcher",
+  "args": [],
+  "news_url": "https://raw.githubusercontent.com/github/markup/master/README.md",
+  "icon": "assets/empty_icon.png",
+  "cover": "assets/empty_background.jpg",
+  "update": {
+    "url": "",
+    "dest": "X:\\GameDev\\OpenGamesLauncher\\Open-Games-Launcher\\sample_update.zip",
+    "extract_to": "X:\\GameDev\\OpenGamesLauncher\\Open-Games-Launcher"
+  }
+}

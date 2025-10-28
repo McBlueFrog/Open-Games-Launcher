@@ -20,8 +20,9 @@ It’s designed to be simple, customizable, and friendly for small indie project
 ## Setup
 
  - Install python 3.10+
- - ```pip install -r requirements.txt```
- - ```python launcher.py```
+ - Create a virtual environment: ```python -m venv venv``` 
+ - Install the required modules into the virtual environment: ```pip install -r requirements.txt```
+ - Launch the launcher: ```python launcher.py```
  - That's it!
 
 ## How to use

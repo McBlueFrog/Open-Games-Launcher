@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 import threading
@@ -13,6 +15,7 @@ import logging
 import customtkinter as ctk
 from tkinter import filedialog, messagebox, TclError
 from PIL import Image, ImageTk
+
 
 # ===== Config =====
 APP_TITLE = "Open Games Launcher"

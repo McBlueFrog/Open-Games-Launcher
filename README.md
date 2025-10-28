@@ -4,6 +4,7 @@ A general open-source video game launcher be it your own or any other game
 A clean, modern, open-source game launcher built in **Python + CustomTkinter**.  
 It’s designed to be simple, customizable, and friendly for small indie projects, modded titles.
 
+![launcher image](./assets/gitassets/Launcher_look.jpg)
 
 ## ✨ Features
 

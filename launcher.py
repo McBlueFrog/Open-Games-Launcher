@@ -73,14 +73,18 @@ SCHEMA_DEFAULT = {
     "work_dir": str(Path.cwd()),
     "args": [],
     "news_url": "https://raw.githubusercontent.com/github/markup/master/README.md",
+    "settings_enabled": False,
+    "settings_files": [],
     "icon": "assets/empty_icon.png",
     "cover": "assets/empty_background.jpg",
     "update": {
+        "enabled": False,
         "url": "",
         "dest": str(Path.cwd() / "sample_update.zip"),
         "extract_to": str(Path.cwd())
     }
 }
+
 
 def _read_game_file(p: Path) -> dict:
     try:
@@ -91,12 +95,28 @@ def _read_game_file(p: Path) -> dict:
         if not data.get("work_dir"):
             gp = Path(data.get("game_path", "")) if data.get("game_path") else None
             data["work_dir"] = str(gp.parent if gp and gp.exists() else Path.cwd())
+
+        # defaults for settings / update toggles
+        # settings: top-level flags
+        if "settings_files" not in data:
+            data["settings_files"] = []
+        if "settings_enabled" not in data:
+            # auto-enable if files list is non-empty
+            data["settings_enabled"] = bool(data.get("settings_files"))
+
+        # update: nested dict with optional 'enabled'
+        up = data.get("update") or {}
+        if "enabled" not in up:
+            # auto-enable only if URL is configured
+            up["enabled"] = bool(up.get("url"))
+        data["update"] = up
+
         data["meta_path"] = str(p)
         return data
     except Exception as e:
         logging.warning(f"Skipping bad game file {p.name}: {e}")
         return {}
-
+    
 def _write_game_file(game: dict) -> Path:
     gid = (game.get("id") or game.get("name") or "game").lower().replace(" ", "_")
     p = Path(game.get("meta_path") or (GAMES_DIR / f"{gid}.json"))
@@ -128,6 +148,7 @@ def save_games(games: list[dict]) -> None:
             _write_game_file(g)
         except Exception as e:
             logging.error(f"Save failed for {g.get('id','(no id)')}: {e}")
+
 
 # ===== Launching =====
 def launch_game(game_path, work_dir=None, args=None):
@@ -218,6 +239,48 @@ class HoverButton(ctk.CTkButton):
         self.configure(fg_color=self.normal_fg_color, text_color=self.normal_text_color)
 
 # ===== UI =====
+class SettingsEditor(ctk.CTkToplevel):
+    def __init__(self, master, file_path: str):
+        super().__init__(master)
+        self.file_path = Path(file_path)
+
+        self.title(f"Settings - {self.file_path.name}")
+        self.geometry("800x600")
+
+        # Text area
+        self.text = ctk.CTkTextbox(self, wrap="none")
+        self.text.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+
+        # Bottom buttons
+        btn_frame = ctk.CTkFrame(self)
+        btn_frame.pack(fill="x", padx=10, pady=10)
+
+        self.save_button = ctk.CTkButton(btn_frame, text="Save", command=self.save)
+        self.save_button.pack(side="left", padx=5)
+
+        self.close_button = ctk.CTkButton(btn_frame, text="Close", command=self.destroy)
+        self.close_button.pack(side="right", padx=5)
+
+        self._load_contents()
+
+    def _load_contents(self):
+        try:
+            content = self.file_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            content = ""
+        except UnicodeDecodeError:
+            # fallback if config is weird
+            content = self.file_path.read_text(errors="ignore")
+
+        self.text.delete("1.0", "end")
+        self.text.insert("1.0", content)
+
+    def save(self):
+        content = self.text.get("1.0", "end-1c")
+        self.file_path.write_text(content, encoding="utf-8")
+        # Tiny feedback through title
+        self.title(f"Settings - {self.file_path.name} (saved)")
+
 class Launcher(ctk.CTk):
     def __init__(self, games):
         super().__init__()
@@ -286,8 +349,20 @@ class Launcher(ctk.CTk):
         self.status_lbl = ctk.CTkLabel(controls, text="")
         self.status_lbl.pack(side="left")
 
-        HoverButton(controls, text="Play ▶",   command=self.play).pack(side="right", padx=4)
-        HoverButton(controls, text="Update ⟳", command=self.download).pack(side="right", padx=4)
+        # action buttons (right-aligned): [Update] [Settings] [Play]
+        self.play_button = HoverButton(controls, text="Play ▶", command=self.play)
+        self.play_button.pack(side="right", padx=4)
+
+        self.settings_button = HoverButton(
+            controls,
+            text="Settings ⚙",
+            command=self.open_settings,
+            state="disabled",
+        )
+        self.settings_button.pack(side="right", padx=4)
+
+        self.update_button = HoverButton(controls, text="Update ⟳", command=self.download)
+        self.update_button.pack(side="right", padx=4)
 
         self.refresh_game_list(select_index=0)
         if self.games:
@@ -317,12 +392,17 @@ class Launcher(ctk.CTk):
     def on_select(self, idx: int):
         self.selected = idx
         for i, b in enumerate(self.buttons):
-            b.configure(fg_color=("#F6C90E" if i == idx else "#111418"),
-                        text_color=("#111418" if i == idx else "#E8EEF3"))
+            b.configure(
+                fg_color=("#F6C90E" if i == idx else "#111418"),
+                text_color=("#111418" if i == idx else "#E8EEF3"),
+            )
         g = self.games[idx]
         self._set_cover(g.get("cover"))
         self.set_status(f"Selected: {g.get('name')}")
+        # update buttons (Settings / Update) based on this game's config
+        self._update_action_states(g)
         self.load_news()
+
 
     # ==== UI helpers ====
     def set_status(self, txt: str):
@@ -341,6 +421,77 @@ class Launcher(ctk.CTk):
         self.news.delete("1.0", "end")
         self.news.insert("1.0", txt)
         self.news.configure(state="disabled")
+
+    # ==== Per-game control state / settings helpers ====
+    def _get_settings_files(self, g: dict) -> list[str]:
+        """Return a normalized list of settings file paths for a game."""
+        if not g:
+            return []
+        sf = g.get("settings_files") or g.get("settings_file")
+        if isinstance(sf, str):
+            return [sf]
+        if isinstance(sf, list):
+            return [s for s in sf if isinstance(s, str)]
+        return []
+
+    def _update_action_states(self, g: dict | None):
+        """Enable / disable Settings and Update buttons based on game config."""
+        g = g or {}
+        # Settings: need both enabled flag and at least one file
+        settings_enabled = bool(g.get("settings_enabled")) and bool(self._get_settings_files(g))
+        self.settings_button.configure(state=("normal" if settings_enabled else "disabled"))
+
+        # Update: respect nested update.enabled, fallback to URL presence
+        up = g.get("update") or {}
+        update_enabled = up.get("enabled")
+        if update_enabled is None:
+            update_enabled = bool(up.get("url"))
+        self.update_button.configure(state=("normal" if update_enabled else "disabled"))
+
+    def open_settings(self):
+        """Open settings editor window for the currently selected game."""
+        _, g = self.current()
+        if not g:
+            return
+        if not g.get("settings_enabled"):
+            self.set_status("Settings disabled for this game.")
+            return
+
+        files = self._get_settings_files(g)
+        if not files:
+            self.set_status("No settings files configured.")
+            return
+
+        # Ensure files exist on disk (create empty if missing)
+        for f in files:
+            path = Path(f)
+            if not path.exists():
+                try:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.touch()
+                except OSError:
+                    pass
+
+        if len(files) == 1:
+            SettingsEditor(self, files[0])
+            return
+
+        # more than one: small chooser window
+        chooser = ctk.CTkToplevel(self)
+        chooser.title("Choose settings file")
+        chooser.geometry("400x220")
+
+        label = ctk.CTkLabel(chooser, text="Select a settings file to edit:")
+        label.pack(padx=10, pady=(10, 5))
+
+        for f in files:
+            p = Path(f)
+            btn = ctk.CTkButton(
+                chooser,
+                text=p.name,
+                command=lambda path=f: (SettingsEditor(self, path), chooser.destroy()),
+            )
+            btn.pack(fill="x", padx=10, pady=4)
 
     # ==== Actions ====
     def current(self):
@@ -379,7 +530,56 @@ class Launcher(ctk.CTk):
         threading.Thread(target=job, daemon=True).start()
 
     def _news_loaded(self, text: str):
-        self._set_news(text)
+        """
+        Try to parse JSON news first:
+        {
+        "game_id": "reborn",
+        "entries": [
+            {"title": "...", "date": "YYYY-MM-DD", "body": "..."},
+            ...
+        ]
+        }
+        Fallback: show raw text as before.
+        """
+        formatted = text
+
+        try:
+            data = json.loads(text)
+            # Accept both {"entries":[...]} and bare list
+            entries = data.get("entries") if isinstance(data, dict) else data
+
+            if isinstance(entries, list):
+                blocks = []
+                for e in entries:
+                    if not isinstance(e, dict):
+                        continue
+                    title = e.get("title") or e.get("id") or ""
+                    date = e.get("date") or ""
+                    header_parts = []
+                    if title:
+                        header_parts.append(title)
+                    if date:
+                        header_parts.append(f"({date})")
+                    header = " ".join(header_parts).strip()
+
+                    if header:
+                        blocks.append(header)
+                        blocks.append("-" * len(header))
+
+                    body = e.get("body") or e.get("text") or ""
+                    if body:
+                        blocks.append(body.strip())
+
+                    blocks.append("")  # blank line between entries
+
+                if blocks:
+                    formatted = "\n".join(blocks).strip()
+
+        except Exception:
+            # Not JSON or bad JSON – just show raw text
+            pass
+
+        self._set_news(formatted)
         self.set_status("News loaded.")
 
     def download(self):
@@ -387,6 +587,10 @@ class Launcher(ctk.CTk):
         if not g:
             return
         up = g.get("update") or {}
+        # optional per-game toggle
+        if up.get("enabled") is False:
+            _safe_mb("info", "Update", "Updates are disabled for this game.")
+            return
         url, dest, extract_to = up.get("url"), up.get("dest"), up.get("extract_to")
         if not url or not dest:
             _safe_mb("info", "Update", "Update block missing 'url' or 'dest'.")
@@ -416,7 +620,6 @@ class Launcher(ctk.CTk):
         while (GAMES_DIR / f"{gid}.json").exists():
             gid = f"{base_id}_{n}"
             n += 1
-
         new = {
             "id": gid,
             "name": p.stem,
@@ -424,11 +627,18 @@ class Launcher(ctk.CTk):
             "work_dir": str(p.parent),
             "args": [],
             "news_url": "",
+            "settings_enabled": False,
+            "settings_files": [],
             "icon": "assets/empty_icon.png",
             "cover": "assets/empty_background.jpg",
-            "update": { "url": "", "dest": "", "extract_to": str(p.parent) }
+            "update": {
+                "enabled": False,
+                "url": "",
+                "dest": "",
+                "extract_to": str(p.parent),
+            },
         }
-        _write_game_file(new)           # write per-game file
+        _write_game_file(new)
         self.games.append(new)
         self.set_status(f"Added {new['name']}")
         self.refresh_game_list(select_index=len(self.games)-1)

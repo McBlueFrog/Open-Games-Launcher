@@ -33,6 +33,18 @@ _HTTP.headers.update({
 })
 
 # ===== Helpers =====
+def resource_path(relative: str) -> str:
+    """
+    Get absolute path to a resource, works for:
+    - running from source
+    - running from PyInstaller-built EXE
+    """
+    try:
+        base_path = sys._MEIPASS  # type: ignore[attr-defined]
+    except Exception:
+        base_path = Path(__file__).resolve().parent
+    return str(Path(base_path) / relative)
+
 def _safe_mb(kind: str, title: str, text: str) -> None:
     """Messagebox that won't crash if Tk isn't ready yet."""
     try:
@@ -684,11 +696,16 @@ class Launcher(ctk.CTk):
 # ===== Entry =====
 def main():
     ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
-    ctk.set_default_color_theme("themes/metal.json")
+    ctk.set_default_color_theme(resource_path("themes/metal.json"))
     app = Launcher(load_games())
-    icopath = ImageTk.PhotoImage(file=APP_ICON)
-    app.iconphoto(False, icopath)
+    try:
+        icopath = ImageTk.PhotoImage(file=resource_path(APP_ICON))
+        app.iconphoto(False, icopath)
+    except Exception:
+        pass
+
     app.mainloop()
+
 
 if __name__ == "__main__":
     main()
